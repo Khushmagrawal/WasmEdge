@@ -31,6 +31,7 @@ env:
   # Common test version constants
   # Please update these versions when necessary
   TEST_VERSION: "0.14.1"
+  TEST_228_VERSION: "0.15.0"
   DEPRECATED_TEST_VERSION: "0.9.0"
 
 jobs:
@@ -41,7 +42,7 @@ jobs:
       version: ${{ steps.get-version.outputs.version }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
         with:
           egress-policy: audit
 
@@ -57,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
         with:
           egress-policy: audit
 
@@ -68,7 +69,7 @@ jobs:
         run: pip install black
 
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
 
@@ -107,12 +108,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
@@ -125,6 +126,9 @@ jobs:
       run: |
         # Source helper functions
         . ./.github/scripts/installer-test-helpers.sh
+
+        # Use the local install.py script
+        export INSTALL_PY_PATH="$(pwd)/utils/install.py"
 
         # Use latest release version from previous job
         LATEST_VERSION="${{ needs.get-latest-version.outputs.version }}"
@@ -145,6 +149,14 @@ jobs:
         verify_plugin "libwasmedgePluginWasiNN.so"
         bash utils/uninstall.sh -q -V
 
+        # Test manylinux_2_28 installation
+        printf "\n=== Test 3: Specific version >= ${TEST_228_VERSION} ===\n"
+        bash utils/install.sh -v ${TEST_228_VERSION} --dist manylinux_2_28 --plugins wasi_nn-ggml -D
+        source ~/.wasmedge/env 2>/dev/null || source ~/.bashrc 2>/dev/null || true
+        verify_version "${TEST_228_VERSION}"
+        verify_plugin "libwasmedgePluginWasiNN.so"
+        bash utils/uninstall.sh -q -V
+
   # Test install.sh on macOS
   test-install-sh-macos:
     needs: get-latest-version
@@ -162,12 +174,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
@@ -181,6 +193,16 @@ jobs:
         # Source helper functions
         . ./.github/scripts/installer-test-helpers.sh
 
+        # Use the local install.py script
+        export INSTALL_PY_PATH="$(pwd)/utils/install.py"
+
+        # Backup contents of existing .bash_profile (if any)
+        [ -e ~/.bash_profile ] && cp ~/.bash_profile ~/.dummy_bash_source
+        # Remove existing .bash_profile (file or symlink)
+        rm -f ~/.bash_profile
+        # Create symlink pointing to dummy source
+        ln -s ~/.dummy_bash_source ~/.bash_profile
+
         # Use latest release version from previous job
         LATEST_VERSION="${{ needs.get-latest-version.outputs.version }}"
         echo "Latest WasmEdge release: ${LATEST_VERSION}"
@@ -191,6 +213,16 @@ jobs:
         source ~/.wasmedge/env 2>/dev/null || source ~/.bashrc 2>/dev/null || true
         verify_version "${LATEST_VERSION}"
         bash utils/uninstall.sh -q -V
+        # Test if the environment variable was removed
+        IPATH="$HOME/.wasmedge"
+        for file in "$HOME/.zshrc" "$HOME/.bash_profile"; do
+        [ -f "$file" ] || continue
+        if grep -q ". \"$IPATH/env\"" "$file"; then
+          echo "✗ Found WasmEdge source line in: $file"
+          echo "✗ Uninstallation failed"
+          exit 1
+        fi
+        done
 
   # Test install_v2.sh
   test-install-v2:
@@ -216,12 +248,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
@@ -274,7 +306,7 @@ jobs:
         bash utils/uninstall.sh -q -V
 
   # Test install_v2.sh on macOS
-  test-install-v2-macos:
+  test-install-v2-sh-macos:
     needs: get-latest-version
     strategy:
       fail-fast: false
@@ -290,12 +322,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
@@ -309,7 +341,14 @@ jobs:
       run: |
         # Source helper functions
         . ./.github/scripts/installer-test-helpers.sh
-
+        
+        # Backup contents of existing .bash_profile (if any)
+        [ -e ~/.bash_profile ] && cp ~/.bash_profile ~/.dummy_bash_source
+        # Remove existing .bash_profile (file or symlink)
+        rm -f ~/.bash_profile
+        # Create symlink pointing to dummy source
+        ln -s ~/.dummy_bash_source ~/.bash_profile
+        
         # Basic installation with GGML plugin (install_v2.sh defaults to ${TEST_VERSION})
         echo "=== Test: Basic installation ==="
         bash utils/install_v2.sh -V
@@ -329,6 +368,16 @@ jobs:
         fi
 
         bash utils/uninstall.sh -q -V
+        # Test if the environment variable was removed
+        IPATH="$HOME/.wasmedge"
+        for file in "$HOME/.zshrc" "$HOME/.bash_profile"; do
+          [ -f "$file" ] || continue
+          if grep -q ". \"$IPATH/env\"" "$file"; then
+            echo "✗ Found WasmEdge source line in: $file"
+            echo "✗ Uninstallation failed"
+            exit 1
+          fi
+        done
 
   # Test install.py with comprehensive features
   test-install-py:
@@ -356,12 +405,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
@@ -443,12 +492,12 @@ jobs:
 
     steps:
     - name: Harden Runner
-      uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+      uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
       with:
         egress-policy: audit
 
     - name: Checkout code
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       with:
         fetch-depth: 0
 
